@@ -26,15 +26,12 @@ import pyttsx3
 # Initialize speech recognizer
 recognizer = sr.Recognizer()
 
-# Initialize text-to-speech engine
-try:
-    engine = pyttsx3.init()
-    # Configure speech rate (speed) and volume for clear diction
-    engine.setProperty("rate", 175)     # 175 provides natural, clear pace
-    engine.setProperty("volume", 1.0)   # Volume range: 0.0 to 1.0
-except Exception as init_err:
-    print(f"[WARNING] Text-to-speech engine initialization failed: {init_err}")
-    engine = None
+# Speech synthesis configuration
+SPEECH_RATE = 175    # 175 provides natural, clear speaking pace
+SPEECH_VOLUME = 1.0  # Full volume (0.0 to 1.0)
+
+# Flag to track whether microphone hardware is functional
+MIC_AVAILABLE = True
 
 
 # =============================================================================
@@ -44,20 +41,28 @@ except Exception as init_err:
 def speak(text: str) -> None:
     """
     Speaks the provided text aloud using pyttsx3 and displays it in the terminal.
+    Re-initializes the TTS engine per utterance to ensure continuous speech audio
+    on Windows (SAPI5) and prevent subsequent commands from falling silent.
     
     Parameters:
         text (str): The response string to display and speak aloud.
     """
-    # Always display the response in the terminal
+    if not text:
+        return
+
+    # Always display the response in the terminal / chat interface
     print(f"\n[Assistant]: {text}")
 
-    # Speak aloud if engine is initialized
-    if engine is not None:
-        try:
-            engine.say(text)
-            engine.runAndWait()
-        except Exception as err:
-            print(f"[Audio Output Error]: Could not play speech audio ({err})")
+    # Speak aloud via text-to-speech
+    try:
+        engine = pyttsx3.init()
+        engine.setProperty("rate", SPEECH_RATE)
+        engine.setProperty("volume", SPEECH_VOLUME)
+        engine.say(text)
+        engine.runAndWait()
+        del engine
+    except Exception as err:
+        print(f"[Audio Output Error]: Could not play speech audio ({err})")
 
 
 def listen(text_mode: bool = False) -> str | None:
@@ -72,8 +77,10 @@ def listen(text_mode: bool = False) -> str | None:
     Returns:
         str: The recognized command in lowercase, or None if recognition fails.
     """
+    global MIC_AVAILABLE
+
     # Direct text-input mode (useful for testing or systems without a mic)
-    if text_mode:
+    if text_mode or not MIC_AVAILABLE:
         try:
             command = input("\n[User (typed)]: ").strip()
             return command.lower() if command else None
@@ -118,12 +125,13 @@ def listen(text_mode: bool = False) -> str | None:
 
     except (OSError, AttributeError) as mic_err:
         # PyAudio not installed or microphone hardware unavailable
+        MIC_AVAILABLE = False
         print(f"\n[!] Microphone Warning: {mic_err}")
         print("[!] Note: PyAudio or microphone hardware is not accessible on this system.")
-        print("[*] Falling back to text input for this command so you can continue testing...")
-        speak("Microphone is currently unavailable. You can type your command below.")
+        print("[*] Automatically switching to text input mode for remaining session...")
+        speak("Microphone is currently unavailable. You can type your commands below.")
         try:
-            command = input("[User (type command)]: ").strip()
+            command = input("\n[User (typed)]: ").strip()
             return command.lower() if command else None
         except (EOFError, KeyboardInterrupt):
             return "exit"
